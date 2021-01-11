@@ -132,7 +132,7 @@
 ! InerGPart SUBROUTINES
 !=================================================================
 
-  SUBROUTINE InerGPart_ctor(this,tau,grav,gamma,nu,donldrag,om,x0)
+  SUBROUTINE InerGPart_ctor(this,tau,grav,gamma,nu,donldrag,om,bv,x0)
 !-----------------------------------------------------------------
 !-----------------------------------------------------------------
 !  Explicit constructor for inertial particles. Should be called
@@ -144,16 +144,16 @@
 !    grav    : gravity acceleration
 !    gamma   : mass ratio (= m_f/m_p)
 !    nu      : fluid viscosity
+!    donldrag: =1 if doing nonlinear drag
+!    om      : rotation rate (optional)
+!    bv      : Brunt-Vaissala frequency (optional)
+!    x0      : origin for rotation and/or stratification (optional)
 !-----------------------------------------------------------------
-    USE fprecision
-
-    IMPLICIT NONE
+    USE fprecision    IMPLICIT NONE
     CLASS(InerGPart), INTENT(INOUT)     :: this
     REAL(KIND=GP),INTENT(IN)            :: tau,grav,gamma,nu
-    REAL(KIND=GP),INTENT(IN),OPTIONAL   :: om(3),x0(3)
-    INTEGER,      INTENT(IN)            :: donldrag
-
-    this%tau_      = tau
+    REAL(KIND=GP),INTENT(IN),OPTIONAL   :: om(3),bv,x0(3)
+    INTEGER,      INTENT(IN)            :: donldrag    this%tau_      = tau
     this%invtau_   = 1.0_GP/tau
     this%grav_     = grav
     this%gamma_    = gamma
@@ -164,13 +164,22 @@
        this%omegax_ = om(1)
        this%omegay_ = om(2)
        this%omegaz_ = om(3)
-       this%px0_ = x0(1)
-       this%py0_ = x0(2)
-       this%pz0_ = x0(3)
     ELSE
        this%dorotatn_ = 0
     ENDIF       
-
+    IF (PRESENT(bv)) THEN
+       this%dostrat_ = 1
+       this%bvfreq_  = bv
+       this%grav_    = 0.0_GP
+       ALLOCATE(this%th_   (this%maxparts_))
+    ELSE
+       this%bvfreq_ = 0
+    ENDIF       
+    IF ((this%dorotatn_.eq.1).OR.((this%dostrat_.eq.1)) THEN
+       this%px0_ = x0(1)
+       this%py0_ = x0(2)
+       this%pz0_ = x0(3)
+    ENDIF
     ALLOCATE(this%pvx_     (this%maxparts_))
     ALLOCATE(this%pvy_     (this%maxparts_))
     ALLOCATE(this%pvz_     (this%maxparts_))
@@ -178,7 +187,6 @@
     ALLOCATE(this%dfy_     (this%maxparts_))
     ALLOCATE(this%dfz_     (this%maxparts_))
     ALLOCATE(this%ttmp0_ (3,this%maxparts_))
-
   END SUBROUTINE InerGPart_ctor
 !-----------------------------------------------------------------
 !-----------------------------------------------------------------
@@ -371,7 +379,7 @@
 !-----------------------------------------------------------------
 !-----------------------------------------------------------------
 
-  SUBROUTINE InerGPart_lite_StepRKK(this, vx, vy, vz, ax, ay, az, dt, xk, tmp1, tmp2)
+  SUBROUTINE InerGPart_lite_StepRKK(this, vx, vy, vz, ax, ay, az, dt, xk, tmp1, tmp2, th)
 !-----------------------------------------------------------------
 !-----------------------------------------------------------------
 !  METHOD     : Step_testp
@@ -410,8 +418,15 @@
 !               - (1 - 3/2 R) Omega x Omega x [X(t) - X0] 
 !
 !               where X0 is located in the center of the domain.    
-!               This method is intended for light inertial particles, or
-!               for inertial particles that include all terms in the
+!               !               If stratification is enabled in the fluid solver, the
+!               equation for the velocity doesn't have the G_z term, and
+!               includes instead the buoyancy:
+!
+!               - (R/gamma) bv [ bv (Z(t)-Z0) - Theta ]
+!  
+!               where bv is the Brunt-Vaissala frequency and Theta the 
+!               buoyancy. This method is intended for light inertial particles, 
+!               or for inertial particles that include all terms in the
 !               Maxey-Riley equations to first order in the particle radius.
 !               Note that the vx, vy, vz, will be overwritten here.
 !  ARGUMENTS  :
@@ -423,6 +438,7 @@
 !    dt       : integration timestep
 !    xk       : multiplicative RK time stage factor
 !    tmpX     : temp arrays the same size as vx, vy, vz
+!    th       : components of the buoynacy if stratification is present (optional)
 !-----------------------------------------------------------------
     USE grid
     USE fprecision
@@ -435,6 +451,8 @@
     REAL(KIND=GP),INTENT(INOUT),DIMENSION(nx,ny,ksta:kend) :: vx,vy,vz
     REAL(KIND=GP),INTENT(INOUT),DIMENSION(nx,ny,ksta:kend) :: ax,ay,az
     REAL(KIND=GP),INTENT(INOUT),DIMENSION(nx,ny,ksta:kend) :: tmp1,tmp2
+    REAL(KIND=GP),INTENT(INOUT),DIMENSION(nx,ny,ksta:kend), &
+                                OPTIONAL                   :: th
     REAL(KIND=GP),INTENT   (IN)                            :: dt,xk
     REAL(KIND=GP)                                          :: dtfact
     REAL(KIND=GP)                                          :: dtv
@@ -455,8 +473,12 @@
     CALL GPart_EulerToLag(this,this%dfy_,this%nparts_,ay,.false.,tmp1,tmp2)
     CALL GPart_EulerToLag(this,this%dfz_,this%nparts_,az,.false.,tmp1,tmp2)
 
-    ! Drag force plus mass ratio term
+    ! Find the Lagrangian buoyancy:
+    IF (PRESENT(th)) THEN
+       CALL GPart_EulerToLag(this,this%th_,this%nparts_,th,.false.,tmp1,tmp2)
+    ENDIF
 
+    ! Drag force plus mass ratio term
     tmparg = 1.5_GP*this%gamma_/(1.0_GP+0.5_GP*this%gamma_)
     IF ( this%donldrag_.EQ.0 ) THEN ! Linear drag
 !$omp parallel do
@@ -479,6 +501,7 @@
 
     ! Rotation
     IF ( this%dorotatn_.EQ.1 ) THEN
+!$omp parallel do
     DO j = 1, this%nparts_
        this%dfx_(j) = this%dfx_(j)-2.0_GP*(this%omegay_*(this%pvz_(j)-tmparg*this%lvz_(j))  - &
                                            this%omegaz_*(this%pvy_(j)-tmparg*this%lvy_(j))) - &
@@ -498,6 +521,15 @@
                                        this%omegax_*this%delta_(3)*(this%pz_(j)-this%pz0_)) - &
                          this%omegay_*(this%omegay_*this%delta_(3)*(this%pz_(j)-this%pz0_)  - &
                                        this%omegaz_*this%delta_(2)*(this%py_(j)-this%py0_)))
+    ENDDO
+    ENDIF
+
+    ! Stratification
+    IF ( this%dostrat_.EQ.1 ) THEN
+    tmparg = his%bvfreq_*this%gamma_/(1.0_GP+0.5_GP*this%gamma_)
+!$omp parallel do
+    DO j = 1, this%nparts_
+       this%dfz_(j) = this%dfz_(j)-tmparg*(this%bvfreq_*(pz_(j)-this%pz0_)-this%_th(j))
     ENDDO
     ENDIF
 
@@ -527,9 +559,9 @@
     ENDDO
 
     ! Enforce periodicity in x-y only:
-    CALL GPart_MakePeriodicP(this,this%px_,this%py_,this%pz_,this%nparts_,3)
+    CALL GPart_MakePeriodicP(this,this%px_,this%py_,this%pz_,this%nparts_,3)    
 
-    CALL GTAcc(this%htimers_(GPTIME_STEP))
+    CALL GTAcc(this%htimers_(GPTIME_STEP))    
 
     CALL InerGPart_EndStageRKK(this,vx,vy,vz,xk,tmp1,tmp2)
 
