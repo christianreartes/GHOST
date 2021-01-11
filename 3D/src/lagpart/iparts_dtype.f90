@@ -25,12 +25,13 @@
   TYPE, PUBLIC, EXTENDS ( VGPart ) :: InerGPart
         PRIVATE
         ! Member data:
-        REAL(KIND=GP), ALLOCATABLE, DIMENSION    (:) :: dfx_,dfy_,dfz_
+        REAL(KIND=GP), ALLOCATABLE, DIMENSION    (:) :: dfx_,dfy_,dfz_,th_
         REAL(KIND=GP)    :: tau_,invtau_,grav_,gamma_,nu_
         REAL(KIND=GP)    :: omegax_,omegay_,omegaz_
+        REAL(KIND=GP)    :: bvfreq_
         REAL(KIND=GP)    :: px0_,py0_, pz0_
-        INTEGER          :: donldrag_,dorotatn_
-        
+        INTEGER          :: donldrag_,dorotatn_, dostrat_
+       
       CONTAINS
         ! Public methods:
         PROCEDURE,PUBLIC :: InerGPart_ctor
