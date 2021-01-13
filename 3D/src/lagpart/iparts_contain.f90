@@ -149,11 +149,13 @@
 !    bv      : Brunt-Vaissala frequency (optional)
 !    x0      : origin for rotation and/or stratification (optional)
 !-----------------------------------------------------------------
-    USE fprecision    IMPLICIT NONE
+    USE fprecision
+    IMPLICIT NONE
     CLASS(InerGPart), INTENT(INOUT)     :: this
     REAL(KIND=GP),INTENT(IN)            :: tau,grav,gamma,nu
     REAL(KIND=GP),INTENT(IN),OPTIONAL   :: om(3),bv,x0(3)
-    INTEGER,      INTENT(IN)            :: donldrag    this%tau_      = tau
+    INTEGER,      INTENT(IN)            :: donldrag
+    this%tau_      = tau
     this%invtau_   = 1.0_GP/tau
     this%grav_     = grav
     this%gamma_    = gamma
@@ -175,7 +177,7 @@
     ELSE
        this%bvfreq_ = 0
     ENDIF       
-    IF ((this%dorotatn_.eq.1).OR.((this%dostrat_.eq.1)) THEN
+    IF ((this%dorotatn_.eq.1).OR.(this%dostrat_.eq.1)) THEN
        this%px0_ = x0(1)
        this%py0_ = x0(2)
        this%pz0_ = x0(3)
@@ -526,10 +528,10 @@
 
     ! Stratification
     IF ( this%dostrat_.EQ.1 ) THEN
-    tmparg = his%bvfreq_*this%gamma_/(1.0_GP+0.5_GP*this%gamma_)
+    tmparg = this%bvfreq_*this%gamma_/(1.0_GP+0.5_GP*this%gamma_)
 !$omp parallel do
     DO j = 1, this%nparts_
-       this%dfz_(j) = this%dfz_(j)-tmparg*(this%bvfreq_*(pz_(j)-this%pz0_)-this%_th(j))
+       this%dfz_(j) = this%dfz_(j)-tmparg*(this%bvfreq_*(pz_(j)-this%pz0_)-this%th_(j))
     ENDDO
     ENDIF
 
