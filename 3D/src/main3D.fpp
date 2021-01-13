@@ -222,6 +222,9 @@
       REAL(KIND=GP), ALLOCATABLE, DIMENSION (:,:,:)    :: Rb1,Rb2,Rb3
       REAL(KIND=GP), ALLOCATABLE, DIMENSION (:,:,:)    :: Rj1,Rj2,Rj3
 #endif
+#if defined(BOUSSINESQ_)
+      REAL(KIND=GP), ALLOCATABLE, DIMENSION (:,:,:)    :: R7
+#endif
 
 !
 ! Auxiliary variables

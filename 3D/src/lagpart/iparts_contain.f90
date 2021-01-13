@@ -531,7 +531,7 @@
     tmparg = this%bvfreq_*this%gamma_/(1.0_GP+0.5_GP*this%gamma_)
 !$omp parallel do
     DO j = 1, this%nparts_
-       this%dfz_(j) = this%dfz_(j)-tmparg*(this%bvfreq_*(pz_(j)-this%pz0_)-this%th_(j))
+       this%dfz_(j) = this%dfz_(j)-tmparg*(this%bvfreq_*(this%pz_(j)-this%pz0_)-this%th_(j))
     ENDDO
     ENDIF
 
