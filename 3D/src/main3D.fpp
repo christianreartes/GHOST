@@ -1603,13 +1603,18 @@
              nstrip,dopacc,ilgwrtunit)
         CALL lagpart%SetRandSeed(seed)
         CALL lagpart%SetSeedFile(trim(lgseedfile))
-#if defined(INERPART_) && !defined(ROTATION_)
+#if defined(INERPART_) && !defined(ROTATION_) && !defined(BOUSSINESQ_) 
         CALL lagpart%InerGPart_ctor(tau,grav,gamma,nu,donldrag)
 #endif
-#if defined(INERPART_) && defined(ROTATION_)
+#if defined(INERPART_) && defined(ROTATION_) && !defined(BOUSSINESQ_) 
         CALL lagpart%InerGPart_ctor(tau,grav,gamma,nu,donldrag, &
-	om=(/omegax,omegay,omegaz/),                            &
-	x0=(/(real(nx+1,kind=GP)/2),(real(ny+1,kind=GP)/2),(real(nz+1,kind=GP)/2)/))
+        om=(/omegax,omegay,omegaz/),                            &
+        x0=(/(real(nx+1,kind=GP)/2),(real(ny+1,kind=GP)/2),(real(nz+1,kind=GP)/2)/))
+#if defined(INERPART_) && !defined(ROTATION_) && defined(BOUSSINESQ_) 
+        CALL lagpart%InerGPart_ctor(tau,grav,gamma,nu,donldrag, &
+        bv=bv,                                                  &
+        x0=(/(real(nx+1,kind=GP)/2),(real(ny+1,kind=GP)/2),(real(nz+1,kind=GP)/2)/))
+#endif
 #endif
 #if defined(TESTPART_) && defined(MAGFIELD_)
         CALL lagpart%TestGPart_ctor()
@@ -2710,7 +2715,24 @@
                                    1.0_GP/real(o,kind=GP),Rv1,Rv2)
          ENDIF
 #endif
-
+#if !defined(BOUSSINESQ_)
+            CALL lagpart%StepLitep(R1,R2,R3,R4,R5,R6,dt, &
+                                   1.0_GP/real(o,kind=GP),Rv1,Rv2)
+#else
+            rmp = 1.0_GP/(real(nx,kind=GP)*real(ny,kind=GP)*real(nz,kind=GP))
+!$omp parallel do if (iend-ista.ge.nth) private (j,k)
+            DO i = ista,iend
+!$omp parallel do if (iend-ista.lt.nth) private (k)
+               DO j = 1,ny
+                  DO k = 1,nz
+                     C7(k,j,i) = th(k,j,i)*rmp
+                  END DO
+               END DO
+            END DO
+            CALL fftp3d_complex_to_real(plancr,C7,R7,MPI_COMM_WORLD)
+            CALL lagpart%StepLitep(R1,R2,R3,R4,R5,R6,dt, &
+                                   1.0_GP/real(o,kind=GP),Rv1,Rv2,th=R7)
+#endif
 #if defined(TESTPART_) && defined(MAGFIELD_)
          rmp = 1.0_GP/(real(nx,kind=GP)*real(ny,kind=GP)*real(nz,kind=GP))
 !$omp parallel do if (iend-ista.ge.nth) private (j,k)
