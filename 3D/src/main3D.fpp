@@ -625,6 +625,9 @@
       ALLOCATE( R4(nx,ny,ksta:kend) )
       ALLOCATE( R5(nx,ny,ksta:kend) )
       ALLOCATE( R6(nx,ny,ksta:kend) )
+#ifdef BOUSSINESQ_
+      ALLOCATE( R7(nx,ny,ksta:kend) )
+#endif
 #endif
 #if defined (INERPART_)
       ALLOCATE( Rv1(nx,ny,ksta:kend) )
@@ -1606,16 +1609,18 @@
              nstrip,dopacc,ilgwrtunit)
         CALL lagpart%SetRandSeed(seed)
         CALL lagpart%SetSeedFile(trim(lgseedfile))
-#if defined(INERPART_) && !defined(ROTATION_) && !defined(BOUSSINESQ_) 
+#if defined(INERPART_)
+#if !defined(ROTATION_) && !defined(BOUSSINESQ_) 
         CALL lagpart%InerGPart_ctor(tau,grav,gamma,nu,donldrag)
 #endif
-#if defined(INERPART_) && defined(ROTATION_) && !defined(BOUSSINESQ_) 
+#if defined(ROTATION_) && !defined(BOUSSINESQ_) 
         CALL lagpart%InerGPart_ctor(tau,grav,gamma,nu,donldrag, &
         om=(/omegax,omegay,omegaz/),                            &
         x0=(/(real(nx+1,kind=GP)/2),(real(ny+1,kind=GP)/2),(real(nz+1,kind=GP)/2)/))
-#if defined(INERPART_) && !defined(ROTATION_) && defined(BOUSSINESQ_) 
+#endif
+#if !defined(ROTATION_) && defined(BOUSSINESQ_) 
         CALL lagpart%InerGPart_ctor(tau,grav,gamma,nu,donldrag, &
-        bv=bv,                                                  &
+        bv=bvfreq,                                              &
         x0=(/(real(nx+1,kind=GP)/2),(real(ny+1,kind=GP)/2),(real(nz+1,kind=GP)/2)/))
 #endif
 #endif
@@ -1623,7 +1628,6 @@
         CALL lagpart%TestGPart_ctor()
 #endif
       ENDIF
-#endif
 #ifdef LAGPART_
       IF ( blgdofp.GT.0 ) THEN ! 'Fixed point' particles: interpolates
                                ! Eulerian fields at given points, and
@@ -1634,6 +1638,7 @@
         CALL lagfp%SetRandSeed(seed)
         CALL lagfp%SetSeedFile(trim(slgfpfile))
       ENDIF
+#endif
 #endif
 
 !
